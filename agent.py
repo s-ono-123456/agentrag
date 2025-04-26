@@ -20,6 +20,9 @@ from langgraph.prebuilt import ToolNode
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
+# model_provider.pyからget_language_model関数をインポート
+from model_provider import get_language_model
+
 # 環境変数の設定
 os.environ["LANGSMITH_TRACING"]="true"
 os.environ["LANGSMITH_ENDPOINT"]="https://api.smith.langchain.com"
@@ -45,8 +48,6 @@ def create_graph(state: GraphState, tools, model_chain):
 
     def call_model(state):
         messages = state["messages"]
-        # 直前はtoolsのメッセージであるため、最後のメッセージを取得し、画像を保存する。
-        last_message = messages[-1]
 
         # model_chain.invokeの実行時間を計測
         start_time = time.time()
@@ -73,39 +74,12 @@ def create_graph(state: GraphState, tools, model_chain):
     return app
 
 def main(graph_config = {"configurable": {"thread_id": "12345"}}, query = None):
-    # モデル設定の読み込み
-    with open("config.json", "r") as f:
-        config = json.load(f)
-    
-    # モデル設定の取得
-    model_config = config.get("modelConfig", {})
-    provider = model_config.get("provider", "google")  # デフォルトはGoogle
-    
-    # モデルプロバイダーに基づいてモデルを初期化
-    if provider == "google":
-        if not google_api_key:
-            raise ValueError("GOOGLE_APIKEYが設定されていません")
-        
-        google_model_config = model_config.get("models", {}).get("google", {})
-        model = ChatGoogleGenerativeAI(
-            model=google_model_config.get("model", "gemini-2.0-flash"),
-            google_api_key=google_api_key,
-            temperature=google_model_config.get("temperature", 0.1),
-        )
-        print("Google Geminiモデルを使用します")
-    elif provider == "openai":
-        if not openai_api_key:
-            raise ValueError("OPENAI_API_KEYが設定されていません")
-        
-        openai_model_config = model_config.get("models", {}).get("openai", {})
-        model = ChatOpenAI(
-            model=openai_model_config.get("model", "gpt-4.1-mini"),
-            openai_api_key=openai_api_key,
-            temperature=openai_model_config.get("temperature", 0.1),
-        )
-        print("OpenAIモデルを使用します")
-    else:
-        raise ValueError(f"未対応のプロバイダー: {provider}")
+    # model_provider.pyのget_language_model関数を使用してモデルを初期化
+    try:
+        model = get_language_model()
+    except ValueError as e:
+        print(f"エラー: {e}")
+        sys.exit(1)
 
     # ツールの初期化
     tools = []
